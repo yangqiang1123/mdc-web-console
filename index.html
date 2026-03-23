@@ -1316,19 +1316,25 @@ createApp({
     }
 
     // ===== Core: send command and wait for result =====
-    async function sendAndWaitCommand(action, params = {}, timeoutSec = 60) {
+    async function sendAndWaitCommand(action, params = {}, timeoutSec = 120) {
       const resp = await apiCall('POST', '/commands', { action, params })
       const cmdId = resp.command?.id
       if (!cmdId) throw new Error('创建命令失败')
-      const pollMs = 1500
-      const maxTries = Math.ceil(timeoutSec * 1000 / pollMs)
-      for (let i = 0; i < maxTries; i++) {
+      const startMs = Date.now()
+      const deadlineMs = startMs + timeoutSec * 1000
+      let pollMs = 800
+      while (Date.now() < deadlineMs) {
         await new Promise(r => setTimeout(r, pollMs))
-        const detail = await apiCall('GET', `/commands/${cmdId}`)
-        const c = detail.command
-        if (!c) continue
-        if (c.status === 'success') return c.result
-        if (c.status === 'failed') throw new Error(c.result || '命令执行失败')
+        try {
+          const detail = await apiCall('GET', `/commands/${cmdId}`)
+          const c = detail.command
+          if (!c) continue
+          if (c.status === 'success') return c.result
+          if (c.status === 'failed') throw new Error(c.result || '命令执行失败')
+        } catch (e) {
+          if (e.message && !e.message.includes('HTTP')) throw e
+        }
+        if (Date.now() - startMs > 15000) pollMs = 1500
       }
       throw new Error('命令执行超时')
     }
