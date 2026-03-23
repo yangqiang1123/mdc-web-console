@@ -1558,6 +1558,21 @@ createApp({
     }
 
     onMounted(() => {
+      const params = new URLSearchParams(window.location.search)
+      const urlKey = params.get('key')
+      const urlApi = params.get('api')
+      if (urlKey) {
+        settings.apiKey = urlKey
+        localStorage.setItem('mdc_api_key', urlKey)
+      }
+      if (urlApi) {
+        settings.apiUrl = urlApi
+        localStorage.setItem('mdc_api_url', urlApi)
+      }
+      if (urlKey || urlApi) {
+        window.history.replaceState({}, '', window.location.pathname)
+      }
+
       checkConnection()
       checkHeartbeat()
       fetchWorkspaces()
