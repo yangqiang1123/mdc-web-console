@@ -27,6 +27,10 @@
     .cmd-detail-enter-from, .cmd-detail-leave-to { max-height: 0; opacity: 0; }
     .cmd-detail-enter-to, .cmd-detail-leave-from { max-height: 500px; opacity: 1; }
     .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+    .term-page-height { height: calc(100vh - 4rem - 4rem - env(safe-area-inset-bottom, 0px)); }
+    @media (min-width: 768px) {
+      .term-page-height { height: calc(100vh - 4rem); }
+    }
     @media (max-width: 767px) {
       .mobile-toast { top: 0.5rem; right: 0.5rem; left: 0.5rem; }
       .mobile-toast > div { max-width: 100%; }
@@ -556,7 +560,7 @@
       </div>
 
       <!-- ==================== Terminal ==================== -->
-      <div v-if="currentPage === 'terminal'" class="p-4 md:p-6 max-w-5xl mx-auto flex flex-col" style="height: calc(100vh - 4rem);">
+      <div v-if="currentPage === 'terminal'" class="p-4 md:p-6 max-w-5xl mx-auto flex flex-col term-page-height">
         <div class="flex items-center justify-between mb-3">
           <h2 class="text-lg md:text-xl font-bold">远程终端</h2>
           <select v-model="termDeviceId" class="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs md:text-sm focus:outline-none focus:border-brand-500 max-w-[200px]">
@@ -565,10 +569,10 @@
           </select>
         </div>
         <div class="flex-1 bg-gray-950 border border-gray-800 rounded-xl overflow-hidden flex flex-col min-h-0">
-          <div ref="termOutput" class="flex-1 overflow-y-auto p-3 font-mono text-xs md:text-sm leading-relaxed">
+          <div ref="termOutput" class="flex-1 overflow-y-auto p-3 font-mono text-xs md:text-sm leading-relaxed select-text" style="-webkit-user-select: text; user-select: text;">
             <div v-for="(entry, i) in termHistory" :key="i">
-              <div v-if="entry.type === 'cmd'" class="text-emerald-400">$ {{ entry.text }}</div>
-              <pre v-else class="text-gray-300 whitespace-pre-wrap break-words">{{ entry.text }}</pre>
+              <div v-if="entry.type === 'cmd'" class="text-emerald-400 select-text">$ {{ entry.text }}</div>
+              <pre v-else class="text-gray-300 whitespace-pre-wrap break-words select-text" style="-webkit-user-select: text; user-select: text;">{{ entry.text }}</pre>
             </div>
             <div v-if="termLoading" class="text-gray-500 flex items-center gap-2 mt-1"><span class="spinner"></span> 执行中...</div>
           </div>
@@ -644,60 +648,106 @@
           <button @click="ciTab = 'gerrit'" :class="['px-4 py-1.5 rounded-md text-xs font-medium transition-all', ciTab === 'gerrit' ? 'bg-brand-600 text-white' : 'text-gray-400']">Gerrit</button>
         </div>
 
-        <!-- Jenkins Tab -->
+        <!-- Jenkins Tab: Build URL → 查询/Rebuild -->
         <div v-if="ciTab === 'jenkins'">
-          <div class="flex gap-2 mb-4">
-            <button @click="ciLoadJenkinsJobs" :disabled="ciLoading" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 rounded-lg text-sm disabled:opacity-40">
-              {{ ciJenkinsJobs.length > 0 ? '刷新作业列表' : '加载作业列表' }}
-            </button>
-          </div>
-          <div v-if="ciLoading" class="text-center py-8 text-gray-500"><span class="spinner"></span> 加载中...</div>
-          <div v-else-if="ciJenkinsJobs.length === 0" class="text-center py-8 text-gray-500">点击上方按钮加载 Jenkins 作业</div>
-          <div v-else class="space-y-2">
-            <div v-for="job in ciJenkinsJobs" :key="job.url" class="bg-gray-900 border border-gray-800 rounded-xl p-3 md:p-4">
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2 min-w-0">
-                  <span :class="['w-3 h-3 rounded-full shrink-0', jenkinsColorClass(job.color)]"></span>
-                  <span class="font-medium text-sm truncate">{{ job.name }}</span>
-                </div>
-                <div class="flex items-center gap-2 shrink-0 ml-2">
-                  <button @click="ciViewJob(job)" class="text-xs text-brand-400 hover:text-brand-300">详情</button>
-                  <button @click="ciTriggerBuild(job)" class="text-xs text-emerald-400 hover:text-emerald-300">构建</button>
-                </div>
-              </div>
-              <div class="text-xs text-gray-500 mt-1 truncate">{{ job.url }}</div>
+          <div class="space-y-3 mb-4">
+            <div>
+              <label class="text-xs text-gray-400 mb-1 block">已开始 Build URL</label>
+              <input v-model="jenkinsBuildUrl" class="w-full bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-brand-500"
+                     placeholder="如：http://10.0.80.24:8080/job/VerifyBuild_for_IOT_6490/28452/" />
             </div>
           </div>
-          <!-- Job Detail Dialog -->
-          <div v-if="ciJobDetail" class="mt-4 bg-gray-900 border border-gray-700 rounded-xl p-4">
-            <div class="flex items-center justify-between mb-3">
-              <h3 class="font-medium text-sm">{{ ciJobDetail.name }}</h3>
-              <button @click="ciJobDetail = null" class="text-xs text-gray-500 hover:text-gray-300">关闭</button>
+          <div class="flex flex-wrap gap-2 mb-4">
+            <button @click="ciQueryBuild" :disabled="ciLoading || !jenkinsBuildUrl.trim()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm disabled:opacity-40">查询 Build</button>
+            <button @click="ciOpenRebuildDialog" :disabled="!jenkinsBuildUrl.trim()" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 rounded-lg text-sm font-medium disabled:opacity-40">Rebuild</button>
+            <button @click="window.open(jenkinsBuildUrl, '_blank')" :disabled="!jenkinsBuildUrl.trim()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm disabled:opacity-40">打开 Build 页面</button>
+          </div>
+          <div v-if="ciLoading" class="text-center py-6 text-gray-500"><span class="spinner"></span> 查询中...</div>
+          <div v-if="ciBuildDetail" class="bg-gray-900 border border-gray-800 rounded-xl p-4 text-sm space-y-2">
+            <div class="flex items-center gap-2 text-gray-400"><span class="w-16 shrink-0">编号</span><span class="text-gray-200">{{ ciBuildDetail.number ?? '-' }}</span></div>
+            <div class="flex items-center gap-2 text-gray-400"><span class="w-16 shrink-0">状态</span>
+              <span :class="ciBuildDetail.building ? 'text-yellow-400' : ciBuildDetail.result === 'SUCCESS' ? 'text-emerald-400' : ciBuildDetail.result === 'FAILURE' ? 'text-red-400' : 'text-gray-300'">
+                {{ ciBuildDetail.building ? '进行中' : (ciBuildDetail.result || '未知') }}
+              </span>
             </div>
-            <div class="text-xs space-y-2 text-gray-400">
-              <div>URL: <span class="text-gray-300 font-mono">{{ ciJobDetail.url }}</span></div>
-              <div>可构建: <span :class="ciJobDetail.buildable ? 'text-emerald-400' : 'text-red-400'">{{ ciJobDetail.buildable ? '是' : '否' }}</span></div>
-              <div v-if="ciJobDetail.last_build_number">最近构建: #{{ ciJobDetail.last_build_number }}</div>
-              <div v-if="ciJobDetail.parameters?.length > 0">
-                <div class="mb-1">构建参数:</div>
-                <div v-for="p in ciJobDetail.parameters" :key="p.name" class="pl-3 py-1 border-l-2 border-gray-700">
-                  <span class="text-gray-300">{{ p.name }}</span> <span class="text-gray-600">({{ p.type }})</span>
-                  <span v-if="p.default_value" class="text-gray-500"> = {{ p.default_value }}</span>
-                </div>
+            <div class="flex items-center gap-2 text-gray-400"><span class="w-16 shrink-0">URL</span><span class="text-gray-300 font-mono text-xs break-all">{{ ciBuildDetail.url }}</span></div>
+          </div>
+        </div>
+
+        <!-- Rebuild Dialog -->
+        <div v-if="rebuildDialog.show" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 flex items-end md:items-center justify-center md:p-4" @click.self="rebuildDialog.show = false">
+          <div class="bg-gray-900 border border-gray-700 rounded-t-2xl md:rounded-2xl w-full max-w-lg p-5 md:p-6 max-h-[85vh] overflow-y-auto">
+            <h3 class="text-lg font-bold mb-4">Rebuild 参数</h3>
+            <div class="mb-3">
+              <label class="text-xs text-gray-400 mb-1 block">Build URL</label>
+              <input :value="rebuildDialog.buildUrl" readonly class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm font-mono text-gray-400" />
+            </div>
+            <label class="flex items-center gap-2 mb-3 cursor-pointer text-sm">
+              <input type="checkbox" v-model="rebuildDialog.overrideEnabled" class="accent-yellow-500" />
+              <span>本次 Rebuild 修改 GERRITID 参数</span>
+            </label>
+            <div v-if="rebuildDialog.overrideEnabled" class="space-y-3 mb-4 pl-2 border-l-2 border-yellow-600/40">
+              <div v-for="key in ['GERRITID_QSSI','GERRITID_VENDOR','GERRITID_LE','GERRITID_MDEP']" :key="key">
+                <label class="text-xs text-gray-400 mb-1 block">{{ key }}</label>
+                <input v-model="rebuildDialog.overrides[key]" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-yellow-500"
+                       :placeholder="'填写 ' + key.split('_').slice(1).join('_').toLowerCase() + ' 分支的 GerritID'" />
               </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-4">
+              <button @click="rebuildDialog.show = false" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm">取消</button>
+              <button @click="ciRebuild" :disabled="ciLoading" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 rounded-lg text-sm font-medium disabled:opacity-40">
+                <span v-if="ciLoading" class="spinner mr-1"></span>确认 Rebuild
+              </button>
             </div>
           </div>
         </div>
 
-        <!-- Gerrit Tab -->
+        <!-- Gerrit Tab: structured search -->
         <div v-if="ciTab === 'gerrit'">
-          <div class="flex gap-2 mb-4">
-            <input v-model="ciGerritQuery" @keydown.enter="ciSearchGerrit" class="flex-1 bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-500"
-                   placeholder="Gerrit 搜索, 例如: status:open project:my-project" />
-            <button @click="ciSearchGerrit" :disabled="ciLoading || !ciGerritQuery.trim()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 rounded-lg text-sm disabled:opacity-40 shrink-0">搜索</button>
+          <div class="space-y-3 mb-4">
+            <div class="flex flex-wrap items-center gap-3">
+              <div class="flex items-center gap-2">
+                <label class="text-xs text-gray-400 shrink-0 w-16">状态</label>
+                <select v-model="gerritStatus" class="bg-gray-900 border border-gray-800 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-brand-500">
+                  <option value="open">Open</option>
+                  <option value="merged">Merged</option>
+                  <option value="abandoned">Abandoned</option>
+                </select>
+              </div>
+              <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input type="checkbox" v-model="gerritExcludeWip" class="accent-brand-500" />
+                <span class="text-gray-300">排除 WIP</span>
+              </label>
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="text-xs text-gray-400 shrink-0 w-16">分支</label>
+              <input v-model="gerritBranch" list="gerrit-branch-list" class="flex-1 bg-gray-900 border border-gray-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-brand-500" placeholder="全部分支" />
+              <datalist id="gerrit-branch-list"><option v-for="b in gerritBranches" :key="b" :value="b" /></datalist>
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="text-xs text-gray-400 shrink-0 w-16">Owner</label>
+              <input v-model="gerritOwner" class="flex-1 bg-gray-900 border border-gray-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-brand-500" placeholder="如：yangqiang0502@thundersoft.com" />
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="text-xs text-gray-400 shrink-0 w-16">关键字</label>
+              <input v-model="gerritKeyword" @keydown.enter="ciSearchGerrit(1)" class="flex-1 bg-gray-900 border border-gray-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-brand-500" placeholder="如：lt9611" />
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="text-xs text-gray-400 shrink-0 w-16">每页</label>
+              <select v-model="gerritPageSize" class="bg-gray-900 border border-gray-800 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-brand-500">
+                <option :value="10">10</option>
+                <option :value="25">25</option>
+                <option :value="50">50</option>
+              </select>
+            </div>
+            <div class="flex items-center gap-3">
+              <button @click="ciSearchGerrit(1)" :disabled="ciLoading" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 rounded-lg text-sm disabled:opacity-40 shrink-0">
+                <span v-if="ciLoading" class="spinner mr-1"></span>查询提交
+              </button>
+              <span class="text-xs text-gray-500 font-mono truncate">{{ buildGerritQueryPreview }}</span>
+            </div>
           </div>
-          <div v-if="ciLoading" class="text-center py-8 text-gray-500"><span class="spinner"></span> 搜索中...</div>
-          <div v-else-if="ciGerritResults.length === 0 && ciGerritSearched" class="text-center py-8 text-gray-500">未找到匹配的变更</div>
+          <div v-if="ciGerritResults.length === 0 && ciGerritSearched && !ciLoading" class="text-center py-8 text-gray-500">未找到匹配的变更</div>
           <div v-else class="space-y-2">
             <div v-for="ch in ciGerritResults" :key="ch.number" class="bg-gray-900 border border-gray-800 rounded-xl p-3 md:p-4">
               <div class="flex items-center justify-between mb-1">
@@ -714,6 +764,11 @@
                 <span>{{ ch.updated }}</span>
               </div>
             </div>
+          </div>
+          <div v-if="ciGerritResults.length > 0" class="flex items-center justify-center gap-4 mt-4">
+            <button @click="ciSearchGerrit(gerritPage - 1)" :disabled="gerritPage <= 1" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm disabled:opacity-40">上一页</button>
+            <span class="text-sm text-gray-400">第 {{ gerritPage }} 页</span>
+            <button @click="ciSearchGerrit(gerritPage + 1)" :disabled="!gerritHasMore" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm disabled:opacity-40">下一页</button>
           </div>
         </div>
       </div>
@@ -943,9 +998,25 @@ createApp({
     // CI Tools state
     const ciTab = ref('jenkins')
     const ciLoading = ref(false)
-    const ciJenkinsJobs = ref([])
-    const ciJobDetail = ref(null)
-    const ciGerritQuery = ref('')
+    // Jenkins Rebuild
+    const jenkinsBuildUrl = ref('')
+    const ciBuildDetail = ref(null)
+    const rebuildDialog = reactive({
+      show: false,
+      buildUrl: '',
+      overrideEnabled: false,
+      overrides: { GERRITID_QSSI: '', GERRITID_VENDOR: '', GERRITID_LE: '', GERRITID_MDEP: '' }
+    })
+    // Gerrit structured search
+    const gerritStatus = ref('open')
+    const gerritExcludeWip = ref(true)
+    const gerritBranch = ref('')
+    const gerritBranches = ref(JSON.parse(localStorage.getItem('gerrit_branches') || '[]'))
+    const gerritOwner = ref('')
+    const gerritKeyword = ref('')
+    const gerritPageSize = ref(25)
+    const gerritPage = ref(1)
+    const gerritHasMore = ref(false)
     const ciGerritResults = ref([])
     const ciGerritSearched = ref(false)
 
@@ -1406,68 +1477,83 @@ createApp({
     }
 
     // ===== CI Tools - Jenkins =====
-    async function ciLoadJenkinsJobs() {
+    async function ciQueryBuild() {
+      if (!jenkinsBuildUrl.value.trim()) return
       ciLoading.value = true
+      ciBuildDetail.value = null
       try {
-        const result = await sendAndWaitCommand('jenkins-list-jobs', {})
-        ciJenkinsJobs.value = JSON.parse(result || '[]')
-        if (ciJenkinsJobs.value.length === 0) toast('未找到 Jenkins 作业', 'info')
+        const result = await sendAndWaitCommand('jenkins-build-detail', { build_url: jenkinsBuildUrl.value })
+        ciBuildDetail.value = JSON.parse(result)
+        toast('已读取 Build 详情')
       } catch (e) {
-        toast('加载 Jenkins 作业失败: ' + e.message, 'error')
+        toast('查询 Build 失败: ' + e.message, 'error')
       } finally {
         ciLoading.value = false
       }
     }
 
-    async function ciViewJob(job) {
-      ciLoading.value = true
-      try {
-        const result = await sendAndWaitCommand('jenkins-job-detail', { job_url: job.url })
-        ciJobDetail.value = JSON.parse(result)
-      } catch (e) {
-        toast('获取作业详情失败: ' + e.message, 'error')
-      } finally {
-        ciLoading.value = false
-      }
+    function ciOpenRebuildDialog() {
+      if (!jenkinsBuildUrl.value.trim()) return
+      rebuildDialog.buildUrl = jenkinsBuildUrl.value.trim()
+      rebuildDialog.overrideEnabled = false
+      rebuildDialog.overrides = { GERRITID_QSSI: '', GERRITID_VENDOR: '', GERRITID_LE: '', GERRITID_MDEP: '' }
+      rebuildDialog.show = true
     }
 
-    async function ciTriggerBuild(job) {
-      confirmDialog.title = '触发构建'
-      confirmDialog.message = `确认触发 ${job.name} 的构建？`
-      confirmDialog.onConfirm = async () => {
-        ciLoading.value = true
-        try {
-          const result = await sendAndWaitCommand('jenkins-trigger-build', { job_url: job.url })
-          const data = JSON.parse(result)
-          toast(data.message || '构建已触发')
-        } catch (e) {
-          toast('触发构建失败: ' + e.message, 'error')
-        } finally {
-          ciLoading.value = false
+    async function ciRebuild() {
+      ciLoading.value = true
+      try {
+        const overrides = {}
+        if (rebuildDialog.overrideEnabled) {
+          for (const [k, v] of Object.entries(rebuildDialog.overrides)) {
+            if (v.trim()) overrides[k] = v.trim()
+          }
         }
+        const params = { build_url: rebuildDialog.buildUrl }
+        if (Object.keys(overrides).length > 0) params.parameter_overrides = overrides
+        const result = await sendAndWaitCommand('jenkins-rebuild', params)
+        const data = JSON.parse(result)
+        if (data.build_url) jenkinsBuildUrl.value = data.build_url
+        rebuildDialog.show = false
+        toast(data.message || '已触发 Rebuild')
+      } catch (e) {
+        toast('Rebuild 失败: ' + e.message, 'error')
+      } finally {
+        ciLoading.value = false
       }
-      confirmDialog.show = true
     }
 
-    function jenkinsColorClass(color) {
-      if (!color) return 'bg-gray-500'
-      if (color.includes('blue')) return 'bg-blue-500'
-      if (color.includes('green')) return 'bg-emerald-500'
-      if (color.includes('red')) return 'bg-red-500'
-      if (color.includes('yellow')) return 'bg-yellow-500'
-      if (color.includes('grey') || color.includes('disabled')) return 'bg-gray-600'
-      return 'bg-gray-500'
-    }
+    // ===== CI Tools - Gerrit (structured search) =====
+    const buildGerritQueryPreview = computed(() => {
+      const parts = [`status:${gerritStatus.value}`]
+      if (gerritExcludeWip.value) parts.push('-is:wip')
+      if (gerritBranch.value.trim()) parts.push(`branch:${gerritBranch.value.trim()}`)
+      if (gerritOwner.value.trim()) parts.push(`owner:${gerritOwner.value.trim()}`)
+      if (gerritKeyword.value.trim()) parts.push(gerritKeyword.value.trim())
+      return parts.join(' ')
+    })
 
-    // ===== CI Tools - Gerrit =====
-    async function ciSearchGerrit() {
-      if (!ciGerritQuery.value.trim()) return
+    async function ciSearchGerrit(page) {
+      page = page || 1
+      if (page < 1) return
+      const query = buildGerritQueryPreview.value
+      if (!query) return
+      const b = gerritBranch.value.trim()
+      if (b && !gerritBranches.value.includes(b)) {
+        gerritBranches.value.push(b)
+        localStorage.setItem('gerrit_branches', JSON.stringify(gerritBranches.value))
+      }
       ciLoading.value = true
       ciGerritSearched.value = true
+      const limit = gerritPageSize.value
+      const offset = (page - 1) * limit
       try {
-        const result = await sendAndWaitCommand('gerrit-search', { query: ciGerritQuery.value })
+        const result = await sendAndWaitCommand('gerrit-search', { query, limit, offset })
         const data = JSON.parse(result)
         ciGerritResults.value = data.changes || []
+        gerritHasMore.value = data.has_more || false
+        gerritPage.value = page
+        toast(`第 ${page} 页，共 ${ciGerritResults.value.length} 条`)
       } catch (e) {
         toast('搜索 Gerrit 失败: ' + e.message, 'error')
       } finally {
@@ -1616,10 +1702,13 @@ createApp({
       // File Browser
       fbDeviceId, fbCurrentPath, fbPathInput, fbFiles, fbLoading,
       fbPathSegments, fbNavigate, fbRefresh, formatFileSize,
-      // CI Tools
-      ciTab, ciLoading, ciJenkinsJobs, ciJobDetail,
-      ciGerritQuery, ciGerritResults, ciGerritSearched,
-      ciLoadJenkinsJobs, ciViewJob, ciTriggerBuild, jenkinsColorClass,
+      // CI Tools - Jenkins
+      ciTab, ciLoading, jenkinsBuildUrl, ciBuildDetail, rebuildDialog,
+      ciQueryBuild, ciOpenRebuildDialog, ciRebuild,
+      // CI Tools - Gerrit
+      gerritStatus, gerritExcludeWip, gerritBranch, gerritBranches,
+      gerritOwner, gerritKeyword, gerritPageSize, gerritPage, gerritHasMore,
+      ciGerritResults, ciGerritSearched, buildGerritQueryPreview,
       ciSearchGerrit, gerritStatusClass,
       // Existing
       toast, checkHeartbeat, executeAction, batchAction,
